@@ -83,10 +83,33 @@ function applyWeatherFilters(properties: PropertyWithWeather[], filters: Weather
   });
 }
 
+function generateEmptyMessage(filters: WeatherFilters, searchText?: string): string {
+  if (searchText) {
+    return `No properties found matching "${searchText}". Try different search terms.`;
+  }
+  
+  if (filters.minTemp !== undefined || filters.maxTemp !== undefined) {
+    const tempRange = `${filters.minTemp || -20}°C to ${filters.maxTemp || 50}°C`;
+    return `No properties found with temperature in range ${tempRange}. Try adjusting the temperature filter.`;
+  }
+  
+  if (filters.minHumidity !== undefined || filters.maxHumidity !== undefined) {
+    const humidityRange = `${filters.minHumidity || 0}% to ${filters.maxHumidity || 100}%`;
+    return `No properties found with humidity in range ${humidityRange}. Try adjusting the humidity filter.`;
+  }
+  
+  if (filters.weatherCondition) {
+    return `No properties found with "${filters.weatherCondition}" weather condition. Try a different weather filter.`;
+  }
+  
+  return "No properties found matching your criteria. Try adjusting your filters.";
+}
+
 export const getProperties = async (req: Request, res: Response) => {
   try {
     const weatherFilters = parseWeatherFilters(req);
     const hasWeatherFilters = Object.values(weatherFilters).some(v => v !== undefined);
+    const searchText = req.query.searchText as string;
     
     const properties = await prisma.property.findMany({
       take: hasWeatherFilters ? 100 : 20, 
@@ -111,7 +134,13 @@ export const getProperties = async (req: Request, res: Response) => {
     );
 
     if (!hasWeatherFilters) {
-      return res.json(propertiesWithWeather.slice(0, 20));
+      const finalProperties = propertiesWithWeather.slice(0, 20);
+      return res.json({
+        data: finalProperties,
+        count: finalProperties.length,
+        message: finalProperties.length === 0 ? generateEmptyMessage({}, searchText) : "Properties loaded successfully",
+        hasFilters: false
+      });
     }
 
     // Filter only properties that have weather data
@@ -119,13 +148,31 @@ export const getProperties = async (req: Request, res: Response) => {
     
     if (propertiesWithValidWeather.length === 0) {
       console.warn('No properties have valid weather data for filtering');
-      return res.json([]);
+      return res.json({
+        data: [],
+        count: 0,
+        message: "Weather data is currently unavailable. Please try again later.",
+        hasFilters: true
+      });
     }
 
     const filteredProperties = applyWeatherFilters(propertiesWithValidWeather, weatherFilters);
-    return res.json(filteredProperties.slice(0, 20));
+    const finalProperties = filteredProperties.slice(0, 20);
+    
+    return res.json({
+      data: finalProperties,
+      count: finalProperties.length,
+      message: finalProperties.length === 0 ? generateEmptyMessage(weatherFilters, searchText) : "Properties filtered successfully",
+      hasFilters: true,
+      appliedFilters: weatherFilters
+    });
   } catch (error) {
     console.error("Error fetching properties:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+    return res.status(500).json({ 
+      data: [],
+      count: 0,
+      message: "Server error occurred. Please try again later.",
+      error: "Internal Server Error" 
+    });
   }
 };
