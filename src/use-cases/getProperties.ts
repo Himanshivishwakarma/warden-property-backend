@@ -61,7 +61,6 @@ function parseWeatherFilters(req: Request): WeatherFilters {
 
 function applyWeatherFilters(properties: PropertyWithWeather[], filters: WeatherFilters): PropertyWithWeather[] {
   return properties.filter(property => {
-    // Skip properties without weather data
     if (!property.weather) {
       console.log(`Skipping property ${property.name} - no weather data`);
       return false;
@@ -121,7 +120,6 @@ export const getProperties = async (req: Request, res: Response) => {
       },
     });
 
-    // Always fetch weather data for all properties
     const propertiesWithWeather = await Promise.all(
       properties.map(async (property): Promise<PropertyWithWeather> => {
         if (!property.lat || !property.lng) {
@@ -143,7 +141,6 @@ export const getProperties = async (req: Request, res: Response) => {
       });
     }
 
-    // Filter only properties that have weather data
     const propertiesWithValidWeather = propertiesWithWeather.filter(p => p.weather !== null && p.weather !== undefined);
     
     if (propertiesWithValidWeather.length === 0) {
